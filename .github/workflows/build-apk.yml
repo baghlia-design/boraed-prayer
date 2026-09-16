@@ -13,30 +13,22 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Fix and Build
+      - name: Build Debug
         run: |
-          # 1. Create config if missing
-          echo '{"appId":"com.boraed.prayer","appName":"BoRaed","webDir":"www","bundledWebRuntime":false}' > capacitor.config.json
-
-          # 2. Create www folder and index if empty
+          echo '{"appId":"com.boraed.prayer","appName":"BoRaed","webDir":"www"}' > capacitor.config.json
           mkdir -p www
-          if [! -s www/index.html ]; then
-          cat > www/index.html << 'HTML'
-          <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BoRaed</title><style>body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px}h1{color:#22c55e}.card{background:#1e293b;padding:16px;border-radius:12px;margin:10px 0}.b{width:100%;padding:16px;border-radius:12px;border:none;font-weight:bold;font-size:18px;background:#22c55e}</style></head><body><h1>🕌 بورد</h1><div class="card" id="s">⏳ جاري...</div><button class="b" onclick="test()">🔔 جرب تنبيه بعد 10 ث</button><script>async function init(){try{await Capacitor.Plugins.LocalNotifications.requestPermissions();document.getElementById('s').innerHTML='✅ يعمل في الخلفية';let n=new Date();let f=new Date();f.setHours(5,0,0,0);if(f<n)f.setDate(f.getDate()+1);let a=new Date();a.setHours(15,30,0,0);if(a<n)a.setDate(a.getDate()+1);await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'الفجر',body:'حان الوقت',id:1,schedule:{at:f.toISOString()}},{title:'العصر',body:'حان الوقت',id:2,schedule:{at:a.toISOString()}}]});}catch(e){document.getElementById('s').innerHTML=e.message}}async function test(){let d=new Date(Date.now()+10000);await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'تجربة',body:'شغال في الخلفية',id:99,schedule:{at:d.toISOString()}}]});alert('اطفي الشاشة')}init();</script></body></html>
-          HTML
-          fi
-
-          # 3. Create package.json
-          echo '{"name":"boraed-prayer","dependencies":{"@capacitor/core":"^5.6.0","@capacitor/android":"^5.6.0","@capacitor/local-notifications":"^5.0.3"}}' > package.json
-
-          # 4. Clean and build
-          rm -rf android node_modules package-lock.json
+          echo '<!DOCTYPE html><html><body><h1>BoRaed</h1><script>Capacitor.Plugins.LocalNotifications.requestPermissions()</script></body></html>' > www/index.html
+          echo '{"name":"app","dependencies":{"@capacitor/core":"5.6.0","@capacitor/android":"5.6.0","@capacitor/local-notifications":"5.0.3"}}' > package.json
+          rm -rf android node_modules
           npm install
           npx cap add android
-          npx cap copy
-          cd android && chmod +x gradlew &&./gradlew assembleDebug
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+         ./gradlew assembleDebug --stacktrace --info
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: BoRaed-APK-FIXED
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: BoRaed-APK
+          path: android/app/build/outputs/apk/debug/
