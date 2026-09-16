@@ -13,20 +13,21 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install
+      - name: Build
         run: |
-          npm init -y
-          npm install @capacitor/core@5 @capacitor/android@5 @capacitor/local-notifications@5
+          npm install
           npx cap add android || true
           npx cap copy
 
-      - name: Add Silent Plugin & Permissions
-        run: |
+          # Add permissions
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's/INTERNET" \/>/INTERNET" \/>\n <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" \/>\n <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" \/>\n <uses-permission android:name="android.permission.POST_NOTIFICATIONS" \/>/' $MANIFEST
+          if! grep -q "ACCESS_NOTIFICATION_POLICY" "$MANIFEST"; then
+            sed -i '/<uses-permission android:name="android.permission.INTERNET"/a \ <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' "$MANIFEST"
+          fi
 
+          # Add Silent Plugin
           mkdir -p android/app/src/main/java/com/boraed/prayer
-          cat > android/app/src/main/java/com/boraed/prayer/SilentPlugin.java << 'EOF'
+          cat > android/app/src/main/java/com/boraed/prayer/SilentPlugin.java << 'JAVA'
           package com.boraed.prayer;
           import android.app.NotificationManager;
           import android.content.Context;
@@ -34,55 +35,59 @@ jobs:
           import android.media.AudioManager;
           import android.os.Build;
           import android.provider.Settings;
-          import com.getcapacitor.*;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
           import com.getcapacitor.annotation.CapacitorPlugin;
           @CapacitorPlugin(name = "SilentMode")
           public class SilentPlugin extends Plugin {
-              @PluginMethod
-              public void requestPermission(PluginCall call) {
+              @PluginMethod public void requestPermission(PluginCall call){
                   NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&!nm.isNotificationPolicyAccessGranted()) {
-                      Intent intent = new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
-                      getActivity().startActivity(intent);
+                  if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&!nm.isNotificationPolicyAccessGranted()){
+                      Intent i = new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
+                      getActivity().startActivity(i);
                   }
-                  JSObject ret = new JSObject();
-                  ret.put("granted", nm.isNotificationPolicyAccessGranted());
-                  call.resolve(ret);
+                  JSObject r = new JSObject(); r.put("granted", nm.isNotificationPolicyAccessGranted()); call.resolve(r);
               }
-              @PluginMethod
-              public void enableSilent(PluginCall call) {
-                  try {
+              @PluginMethod public void enableSilent(PluginCall call){
+                  try{
                       AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
                       NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
                       am.setRingerMode(AudioManager.RINGER_MODE_SILENT);
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm.isNotificationPolicyAccessGranted()) {
-                          nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE);
-                      }
+                      if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm.isNotificationPolicyAccessGranted()) nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE);
                       call.resolve();
-                  } catch (Exception e){ call.reject(e.getMessage()); }
+                  }catch(Exception e){ call.reject(e.getMessage()); }
               }
-              @PluginMethod
-              public void disableSilent(PluginCall call) {
-                  try {
+              @PluginMethod public void disableSilent(PluginCall call){
+                  try{
                       AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
                       NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
                       am.setRingerMode(AudioManager.RINGER_MODE_NORMAL);
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm.isNotificationPolicyAccessGranted()) {
-                          nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL);
-                      }
+                      if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && nm.isNotificationPolicyAccessGranted()) nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL);
                       call.resolve();
-                  } catch (Exception e){ call.reject(e.getMessage()); }
+                  }catch(Exception e){ call.reject(e.getMessage()); }
               }
           }
-          EOF
+          JAVA
 
-          MAIN=$(find android -name MainActivity.java | head -n 1)
-          echo "Found $MAIN"
-          sed -i 's/import com.getcapacitor.BridgeActivity;/import com.getcapacitor.BridgeActivity;\nimport com.boraed.prayer.SilentPlugin;/' $MAIN
-          sed -i 's/public class MainActivity extends BridgeActivity {/public class MainActivity extends BridgeActivity {\n @Override\n public void onCreate(android.os.Bundle savedInstanceState) {\n super.onCreate(savedInstanceState);\n registerPlugin(SilentPlugin.class);\n }/' $MAIN
+          # Register plugin in MainActivity
+          python3 << 'PY'
+          import glob
+          files = glob.glob("android/**/MainActivity.java", recursive=True)
+          if files:
+              path = files[0]
+              txt = open(path, encoding='utf-8').read()
+              if "SilentPlugin" not in txt:
+                  txt = txt.replace("import com.getcapacitor.BridgeActivity;", "import com.getcapacitor.BridgeActivity;\nimport com.boraed.prayer.SilentPlugin;")
+                  txt = txt.replace("public class MainActivity extends BridgeActivity {", "public class MainActivity extends BridgeActivity {\n @Override\n public void onCreate(android.os.Bundle savedInstanceState) {\n super.onCreate(savedInstanceState);\n registerPlugin(SilentPlugin.class);\n }")
+                  open(path, "w", encoding='utf-8').write(txt)
+                  print("Patched", path)
+          PY
 
-      - run: cd android && chmod +x gradlew &&./gradlew assembleDebug
+          cd android && chmod +x gradlew &&./gradlew assembleDebug
+
       - uses: actions/upload-artifact@v4
         with:
-          name: BoRaed-APK-Silent-Fixed
+          name: BoRaed-APK-Silent
           path: android/app/build/outputs/apk/debug/app-debug.apk
