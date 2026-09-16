@@ -8,14 +8,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
-      - run: npm install @capacitor/core @capacitor/android @capacitor/local-notifications
-      - run: npx cap add android
-      - run: npx cap sync android
-      - run: cd android && chmod +x gradlew &&./gradlew assembleDebug
+      - name: Build APK
+        run: |
+          rm -rf android node_modules package-lock.json
+          npm install @capacitor/core @capacitor/android @capacitor/local-notifications
+          npx cap add android
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+         ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: BoRaed-APK
