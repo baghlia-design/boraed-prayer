@@ -12,34 +12,12 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-
-      - name: Build Debug
+      - name: Build
         run: |
-          cat > capacitor.config.json <<'JSON'
-          {
-            "appId": "com.boraed.prayer",
-            "appName": "BoRaed",
-            "webDir": "www"
-          }
-          JSON
-
+          echo {\"appId\":\"com.boraed.prayer\",\"appName\":\"BoRaed\",\"webDir\":\"www\"} > capacitor.config.json
           mkdir -p www
-          cat > www/index.html <<'HTML'
-          <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BoRaed</title><style>body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:30px}h1{color:#22c55e}.c{background:#1e293b;padding:20px;border-radius:12px;margin:15px 0}button{width:100%;padding:18px;border-radius:12px;border:none;font-weight:bold;font-size:18px;background:#22c55e}</style></head><body><h1>🕌 BoRaed</h1><div class="c" id="s">⏳ جاري تفعيل الإشعارات...</div><div class="c">الفجر 5:00 | العصر 15:30</div><button onclick="test()">🔔 جرب تنبيه بعد 10 ثواني</button><script>async function init(){try{await Capacitor.Plugins.LocalNotifications.requestPermissions();document.getElementById('s').innerText='✅ شغال في الخلفية حتى مع الشاشة مطفية';let n=new Date();let f=new Date();f.setHours(5,0,0,0);if(f<n)f.setDate(f.getDate()+1);let a=new Date();a.setHours(15,30,0,0);if(a<n)a.setDate(a.getDate()+1);await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'الفجر',body:'حان وقت الصلاة',id:1,schedule:{at:f.toISOString()}},{title:'العصر',body:'حان وقت الصلاة',id:2,schedule:{at:a.toISOString()}}]});}catch(e){document.getElementById('s').innerText=e.message}}async function test(){let d=new Date(Date.now()+10000);await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'تجربة',body:'لو وصلك والشاشة مطفية معناه شغال',id:99,schedule:{at:d.toISOString()}}]});alert('اطفي الشاشة الآن')}init();</script></body></html>
-          HTML
-
-          cat > package.json <<'JSON'
-          {
-            "name": "boraed-prayer",
-            "version": "1.0.0",
-            "dependencies": {
-              "@capacitor/core": "^5.6.0",
-              "@capacitor/android": "^5.6.0",
-              "@capacitor/local-notifications": "^5.0.3"
-            }
-          }
-          JSON
-
+          echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>BoRaed</title></head><body><h1>BoRaed Working</h1></body></html>" > www/index.html
+          echo {\"name\":\"app\",\"dependencies\":{\"@capacitor/core\":\"5.6.0\",\"@capacitor/android\":\"5.6.0\",\"@capacitor/local-notifications\":\"5.0.3\"}} > package.json
           rm -rf android node_modules package-lock.json
           npm install
           npx cap add android
@@ -47,8 +25,7 @@ jobs:
           cd android
           chmod +x gradlew
          ./gradlew assembleDebug
-
       - uses: actions/upload-artifact@v4
         with:
-          name: BoRaed-APK-FINAL
+          name: BoRaed-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
