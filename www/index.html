@@ -1,42 +1,29 @@
 <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BoRaed</title>
-<style>body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px}h1{color:#22c55e}.card{background:#1e293b;padding:16px;border-radius:12px;margin:10px 0;text-align:right;border-right:4px solid #22c55e}button{width:100%;padding:16px;border-radius:12px;border:none;font-weight:bold;font-size:18px;margin:6px 0}.g{background:#22c55e;color:#000}.b{background:#38bdf8;color:#000}.r{background:#f87171;color:#000}</style>
-<script src="https://cdn.jsdelivr.net/npm/@capacitor/core@5/dist/capacitor.js"></script>
+<style>body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px}h1{color:#22c55e}.card{background:#1e293b;padding:16px;border-radius:12px;margin:10px 0}.b{width:100%;padding:16px;border-radius:12px;border:none;font-weight:bold;font-size:18px;margin:6px 0;background:#22c55e}</style>
 </head><body>
-<h1>🕌 بورد - الصامت</h1>
-<div class="card" id="st">⏳ جاري التحميل...</div>
-<div class="card">الفجر 5:00 | العصر 15:30<br><small>سيفعل الصامت 25 دقيقة</small></div>
-<button class="g" onclick="enable()">🔇 فعل الصامت الآن</button>
-<button class="b" onclick="test()">🔔 جرب تنبيه بعد 10 ث (يطفي الشاشة)</button>
-<button class="r" onclick="disable()">🔊 إرجاع الصوت</button>
+<h1>🕌 بورد</h1>
+<div class="card" id="s">⏳ جاري...</div>
+<div class="card">الفجر 5:00 | العصر 15:30</div>
+<button class="b" onclick="test()">🔔 جرب تنبيه بعد 10 ثواني (اطف الشاشة)</button>
 <script>
-const el=document.getElementById('st');
 async function init(){
+ const el=document.getElementById('s');
  try{
-  const C=window.Capacitor;
-  if(!C ||!C.Plugins.LocalNotifications){ el.innerHTML='❌ ثبت APK الجديد من Actions'; return; }
-  await C.Plugins.LocalNotifications.requestPermissions();
-  el.innerHTML='✅ الإشعارات جاهزة<br>اضغط "فعل الصامت" وسيطلب إذن عدم الإزعاج';
-  try{ await C.Plugins.SilentMode.requestPermission(); }catch(e){}
-  C.Plugins.LocalNotifications.addListener('localNotificationReceived', async()=>{ await enable(); });
-  schedule();
+  if(!window.Capacitor ||!Capacitor.Plugins.LocalNotifications){ el.innerHTML='ثبت APK الجديد من Artifacts'; return; }
+  await Capacitor.Plugins.LocalNotifications.requestPermissions();
+  el.innerHTML='✅ الإشعارات تعمل في الخلفية حتى مع الشاشة مطفأة';
+  let now=new Date(); let f=new Date(); f.setHours(5,0,0,0); if(f<now) f.setDate(f.getDate()+1);
+  let a=new Date(); a.setHours(15,30,0,0); if(a<now) a.setDate(a.getDate()+1);
+  await Capacitor.Plugins.LocalNotifications.schedule({notifications:[
+   {title:'🕌 الفجر',body:'حان وقت الصلاة',id:1,schedule:{at:f.toISOString()}},
+   {title:'🕌 العصر',body:'حان وقت الصلاة',id:2,schedule:{at:a.toISOString()}}
+  ]});
  }catch(e){ el.innerHTML='خطأ: '+e.message; }
 }
-async function schedule(){
- let now=new Date(); let f=new Date(); f.setHours(5,0,0,0); if(f<now) f.setDate(f.getDate()+1);
- let a=new Date(); a.setHours(15,30,0,0); if(a<now) a.setDate(a.getDate()+1);
- await Capacitor.Plugins.LocalNotifications.schedule({notifications:[
-  {title:'🕌 الفجر',body:'تم تفعيل الصامت',id:1,schedule:{at:f.toISOString()}},
-  {title:'🕌 العصر',body:'تم تفعيل الصامت',id:2,schedule:{at:a.toISOString()}}
- ]});
-}
-async function enable(){
- try{ await Capacitor.Plugins.SilentMode.enableSilent(); el.innerHTML='🔇 الصامت مفعل - يعود بعد 25 د'; setTimeout(disable,25*60*1000); }catch(e){ el.innerHTML='فعل الإذن من الإعدادات > وصول عدم الإزعاج'; }
-}
-async function disable(){ try{ await Capacitor.Plugins.SilentMode.disableSilent(); el.innerHTML='🔊 تم إرجاع الصوت'; }catch(e){} }
 async function test(){
  let d=new Date(Date.now()+10000);
- await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'تجربة',body:'سيفعل الصامت',id:99,schedule:{at:d.toISOString()}}]});
- alert('اطفي الشاشة الآن');
+ await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'تجربة',body:'لو وصلك والشاشة مطفية فهو شغال',id:99,schedule:{at:d.toISOString()}}]});
+ alert('اطفي الشاشة الآن وانتظر 10 ثواني');
 }
 init();
 </script></body></html>
