@@ -1,72 +1,58 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BoRaed - تنبيه الصلاة</title>
-<script type="module" src="https://unpkg.com/@capacitor/core@5.6.0/dist/capacitor.js"></script>
-<style>
-  body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px;margin:0}
-  h1{color:#22c55e}
-  .card{background:#1e293b;padding:18px;border-radius:14px;margin:12px 0;text-align:right;border-right:4px solid #22c55e}
-  button{background:#22c55e;color:#000;padding:16px;width:100%;border-radius:12px;border:none;font-size:19px;font-weight:bold;margin-top:15px}
-  .ok{color:#22c55e} .bad{color:#ef4444}
-  small{opacity:.6}
-</style>
-</head>
-<body>
-<h1>🕌 بورد - تنبيه الصلاة</h1>
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BoRaed</title><style>body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px}h1{color:#22c55e}.card{background:#1e293b;padding:16px;border-radius:12px;margin:10px 0;text-align:right;border-right:4px solid #22c55e}button{width:100%;padding:16px;border-radius:12px;border:none;font-weight:bold;font-size:18px;margin:6px 0}.green{background:#22c55e}.blue{background:#38bdf8}.red{background:#f87171}</style>
+<script src="https://unpkg.com/@capacitor/core@5/dist/capacitor.js"></script>
+<script src="https://unpkg.com/@capacitor/local-notifications@5/dist/index.js"></script>
+</head><body>
+<h1>🕌 بورد - الصامت التلقائي</h1>
 <div class="card" id="perm">⏳ جاري طلب الأذونات...</div>
-<div class="card">الفجر: <b id="fajr">--:--</b><br>العصر: <b id="asr">--:--</b></div>
-<div class="card"><b>كيف يعمل؟</b><br>• يرسل إشعار حتى لو الشاشة مطفية والتطبيق مقفل<br>• يفعل الصامت تلقائياً لمدة 25 دقيقة</div>
-<button onclick="test()">🔔 جرب الآن (بعد 10 ثواني - اطفي الشاشة)</button>
-<small>مهم: بعد التثبيت اذهب للاعدادات > البطارية > التطبيق > اختر "عدم تقييد" ليعمل في الخلفية</small>
-
+<div class="card">الفجر: <b id="fajr">--</b><br>العصر: <b id="asr">--</b></div>
+<button class="green" onclick="testSilent()">🔇 جرب الصامت الآن</button>
+<button class="blue" onclick="testNotif()">🔔 جرب إشعار بعد 10ث + صامت</button>
+<button class="red" onclick="disable()">🔊 إلغاء الصامت</button>
 <script>
-async function start(){
-  const statusEl = document.getElementById('perm');
-  try{
-    const { LocalNotifications } = Capacitor.Plugins;
-    const res = await LocalNotifications.requestPermissions();
-    if(res.display === 'granted'){
-      statusEl.innerHTML = '<span class="ok">✅ تم السماح - الإشعارات ستعمل في الخلفية حتى مع الشاشة مطفأة</span>';
-      scheduleDaily();
-    }else{
-      statusEl.innerHTML = '<span class="bad">❌ لم تسمح بالإشعارات - ادخل اعدادات الجوال > التطبيقات > BoRaed > فعل الإشعارات</span>';
-    }
-  }catch(e){
-    statusEl.innerHTML = 'خطأ: ' + e.message + '<br>تأكد أنك ثبت النسخة الجديدة';
+async function init(){
+ const permEl=document.getElementById('perm');
+ try{
+  const Cap = window.Capacitor;
+  if(!Cap ||!Cap.Plugins ||!Cap.Plugins.LocalNotifications){
+    permEl.innerHTML='❌ الإضافات لم تحمل - تأكد أنك ثبت APK الجديد من Actions -> BoRaed-APK-Silent-Fixed';
+    return;
   }
+  const {LocalNotifications} = Cap.Plugins;
+  await LocalNotifications.requestPermissions();
+  let silentOk=false;
+  try{
+    const r = await Cap.Plugins.SilentMode.requestPermission();
+    silentOk=r.granted;
+  }catch(e){ silentOk=false; }
+  permEl.innerHTML = silentOk? '✅ كل شي جاهز - سيعمل في الخلفية مع الصامت' : '⚠️ تم السماح للإشعارات - الآن فعل سماح عدم الإزعاج من الشاشة التي فتحت';
+  schedule(); listen();
+ }catch(e){ permEl.innerHTML='خطأ: '+e.message; }
 }
-
-async function scheduleDaily(){
-  const { LocalNotifications } = Capacitor.Plugins;
-  await LocalNotifications.cancel({notifications:[{id:1},{id:2}]});
-  let now = new Date();
-  let fajr = new Date(); fajr.setHours(5,0,0,0);
-  if(fajr < now) fajr.setDate(fajr.getDate()+1);
-  let asr = new Date(); asr.setHours(15,30,0,0);
-  if(asr < now) asr.setDate(asr.getDate()+1);
-  
-  document.getElementById('fajr').innerText = fajr.toLocaleTimeString('ar-EG');
-  document.getElementById('asr').innerText = asr.toLocaleTimeString('ar-EG');
-
-  await LocalNotifications.schedule({
-    notifications:[
-      {title:'🕌 حان وقت صلاة الفجر', body:'تم تفعيل وضع الصامت لمدة 25 دقيقة', id:1, schedule:{at:fajr.toISOString()}, sound:null, smallIcon:'ic_launcher', channelId:'prayer'},
-      {title:'🕌 حان وقت صلاة العصر', body:'تم تفعيل وضع الصامت لمدة 25 دقيقة', id:2, schedule:{at:asr.toISOString()}, sound:null, smallIcon:'ic_launcher', channelId:'prayer'}
-    ]
-  });
+async function schedule(){
+ const {LocalNotifications}=Capacitor.Plugins;
+ let now=new Date(); let fajr=new Date(); fajr.setHours(5,0,0,0); if(fajr<now) fajr.setDate(fajr.getDate()+1);
+ let asr=new Date(); asr.setHours(15,30,0,0); if(asr<now) asr.setDate(asr.getDate()+1);
+ document.getElementById('fajr').innerText=fajr.toLocaleTimeString('ar-EG');
+ document.getElementById('asr').innerText=asr.toLocaleTimeString('ar-EG');
+ await LocalNotifications.schedule({notifications:[
+  {title:'🕌 الفجر',body:'تم تفعيل الصامت 25 د',id:1,schedule:{at:fajr.toISOString()}},
+  {title:'🕌 العصر',body:'تم تفعيل الصامت 25 د',id:2,schedule:{at:asr.toISOString()}}
+ ]});
 }
-
-async function test(){
-  const { LocalNotifications } = Capacitor.Plugins;
-  let d = new Date(Date.now()+10000);
-  await LocalNotifications.schedule({notifications:[{title:'🔔 تجربة ناجحة!', body:'لو وصلك هذا والشاشة مطفية معناه التطبيق شغال 100% في الخلفية', id:99, schedule:{at:d.toISOString()}}]});
-  alert('تم جدولة تنبيه بعد 10 ثواني - الآن اطف الشاشة فورا وانتظر');
+function listen(){
+ Capacitor.Plugins.LocalNotifications.addListener('localNotificationReceived', async (n)=>{
+   if(n.id==1||n.id==2||n.id==99) await enableSilent();
+ });
 }
-
-start();
-</script>
-</body>
-</html>
+async function enableSilent(){
+ try{ await Capacitor.Plugins.SilentMode.enableSilent(); document.getElementById('perm').innerHTML='🔇 الصامت مفعل - سيعود بعد 25 دقيقة'; setTimeout(()=>disable(),25*60*1000); }catch(e){ alert(e.message); }
+}
+async function testSilent(){ await enableSilent(); }
+async function testNotif(){
+ let d=new Date(Date.now()+10000);
+ await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'تجربة',body:'سيفعل الصامت الآن',id:99,schedule:{at:d.toISOString()}}]});
+ alert('اطفي الشاشة الآن - بعد 10 ثواني');
+}
+async function disable(){ try{ await Capacitor.Plugins.SilentMode.disableSilent(); document.getElementById('perm').innerHTML='🔊 تم إرجاع الصوت'; }catch(e){} }
+init();
+</script></body></html>
