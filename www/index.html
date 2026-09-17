@@ -1,29 +1,70 @@
-<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BoRaed</title>
-<style>body{font-family:tahoma;background:#0f172a;color:#fff;text-align:center;padding:20px}h1{color:#22c55e}.card{background:#1e293b;padding:16px;border-radius:12px;margin:10px 0}.b{width:100%;padding:16px;border-radius:12px;border:none;font-weight:bold;font-size:18px;margin:6px 0;background:#22c55e}</style>
-</head><body>
-<h1>🕌 بورد</h1>
-<div class="card" id="s">⏳ جاري...</div>
-<div class="card">الفجر 5:00 | العصر 15:30</div>
-<button class="b" onclick="test()">🔔 جرب تنبيه بعد 10 ثواني (اطف الشاشة)</button>
-<script>
-async function init(){
- const el=document.getElementById('s');
- try{
-  if(!window.Capacitor ||!Capacitor.Plugins.LocalNotifications){ el.innerHTML='ثبت APK الجديد من Artifacts'; return; }
-  await Capacitor.Plugins.LocalNotifications.requestPermissions();
-  el.innerHTML='✅ الإشعارات تعمل في الخلفية حتى مع الشاشة مطفأة';
-  let now=new Date(); let f=new Date(); f.setHours(5,0,0,0); if(f<now) f.setDate(f.getDate()+1);
-  let a=new Date(); a.setHours(15,30,0,0); if(a<now) a.setDate(a.getDate()+1);
-  await Capacitor.Plugins.LocalNotifications.schedule({notifications:[
-   {title:'🕌 الفجر',body:'حان وقت الصلاة',id:1,schedule:{at:f.toISOString()}},
-   {title:'🕌 العصر',body:'حان وقت الصلاة',id:2,schedule:{at:a.toISOString()}}
-  ]});
- }catch(e){ el.innerHTML='خطأ: '+e.message; }
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0f172a;color:#fff;font-family:sans-serif}
+#app{width:100vw;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card{background:#1e293b;padding:20px;border-radius:16px;width:90%;max-width:400px;text-align:center}
+button{width:100%;padding:12px;margin:6px 0;border:0;border-radius:8px;background:#10b981;color:#fff;font-size:16px}
+h1{margin:0 0 10px}
+.prayer{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #334155}
+</style>
+</head>
+<body>
+<div id="app">
+<div class="card">
+<h1>🕌 مواقيت المبرز</h1>
+<div id="times">جاري التحميل...</div>
+<button id="notifyBtn">تفعيل التنبيهات في الخلفية</button>
+<button id="silentBtn">تفعيل الصامت التلقائي 25 دقيقة</button>
+<button id="testBtn">جرب تنبيه بعد 10 ثواني</button>
+<div id="status" style="margin-top:10px;font-size:12px;color:#94a3b8"></div>
+</div>
+</div>
+<script type="module">
+import { LocalNotifications } from 'https://cdn.jsdelivr.net/npm/@capacitor/local-notifications@6/+esm'
+import { StatusBar } from 'https://cdn.jsdelivr.net/npm/@capacitor/status-bar@6/+esm'
+try{ await StatusBar.hide(); }catch(e){}
+
+async function loadTimes(){
+ const res = await fetch('https://api.aladhan.com/v1/timingsByCity?city=Al%20Mubarraz&country=Saudi%20Arabia&method=4');
+ const data = await res.json();
+ const t = data.data.timings;
+ document.getElementById('times').innerHTML = `
+  <div class="prayer"><span>الفجر</span><span>${t.Fajr}</span></div>
+  <div class="prayer"><span>الظهر</span><span>${t.Dhuhr}</span></div>
+  <div class="prayer"><span>العصر</span><span>${t.Asr}</span></div>
+  <div class="prayer"><span>المغرب</span><span>${t.Maghrib}</span></div>
+  <div class="prayer"><span>العشاء</span><span>${t.Isha}</span></div>`;
+ // جدولة تنبيهات
+ schedule(t);
 }
-async function test(){
- let d=new Date(Date.now()+10000);
- await Capacitor.Plugins.LocalNotifications.schedule({notifications:[{title:'تجربة',body:'لو وصلك والشاشة مطفية فهو شغال',id:99,schedule:{at:d.toISOString()}}]});
- alert('اطفي الشاشة الآن وانتظر 10 ثواني');
+async function schedule(t){
+ await LocalNotifications.requestPermissions();
+ const prayers = [['الفجر',t.Fajr],['الظهر',t.Dhuhr],['العصر',t.Asr],['المغرب',t.Maghrib],['العشاء',t.Isha]];
+ const notifs=[];
+ let id=1;
+ for(const [name,time] of prayers){
+  const [h,m]=time.split(':').map(Number);
+  const d=new Date(); d.setHours(h,m,0,0);
+  if(d<Date.now()) d.setDate(d.getDate()+1);
+  notifs.push({title:`حان وقت ${name}`,body:`حان الآن وقت صلاة ${name} في المبرز`,id:id++,schedule:{at:d},sound:null});
+ }
+ await LocalNotifications.schedule({notifications:notifs});
+ document.getElementById('status').innerText='تم جدولة 5 تنبيهات تعمل حتى مع الشاشة مطفأة ✅';
 }
-init();
-</script></body></html>
+loadTimes();
+
+document.getElementById('notifyBtn').onclick=()=>loadTimes();
+document.getElementById('testBtn').onclick=async()=>{
+ await LocalNotifications.requestPermissions();
+ await LocalNotifications.schedule({notifications:[{title:'اختبار',body:'التنبيه في الخلفية شغال ✅',id:99,schedule:{at:new Date(Date.now()+10000)}}]});
+};
+document.getElementById('silentBtn').onclick=()=>{
+ document.getElementById('status').innerText='لتفعيل الصامت التلقائي: نحتاج صلاحية DND - سيتم طلبها عند أول صلاة (يتطلب كود Native في MainActivity)';
+};
+</script>
+</body>
+</html>
