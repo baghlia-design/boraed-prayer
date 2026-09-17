@@ -19,6 +19,64 @@ jobs:
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest @capacitor/status-bar@latest --legacy-peer-deps
           npx cap init BoRaed com.boraed.prayer --web-dir=www
           npx cap add android
+
+          # تركيب الأيقونة تلقائياً في كل الأحجام
+          if [ -f icon.png ]; then
+            for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              cp icon.png android/app/src/main/res/$d/ic_launcher.png
+              cp icon.png android/app/src/main/res/$d/ic_launcher_round.png
+              cp icon.png android/app/src/main/res/$d/ic_launcher_foreground.png
+            done
+          fi
+
+          # كود الشاشة الكاملة + الصامت حسب الإعدادات
+          cat > android/app/src/main/java/com/boraed/prayer/MainActivity.java << 'JAVA'
+          package com.boraed.prayer;
+          import android.app.NotificationManager;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.media.AudioManager;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.JavascriptInterface;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+              @Override public void onCreate(Bundle s){
+                  super.onCreate(s);
+                  getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+                  hide();
+                  getBridge().getWebView().addJavascriptInterface(new SilentBridge(), "AndroidSilent");
+              }
+              void hide(){
+                  getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN);
+              }
+              @Override public void onWindowFocusChanged(boolean f){ super.onWindowFocusChanged(f); if(f) hide(); }
+              public class SilentBridge {
+                  @JavascriptInterface public void setSilent(int minutes){
+                      runOnUiThread(() -> {
+                          NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+                          if (!nm.isNotificationPolicyAccessGranted()){
+                              startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)); return;
+                          }
+                          AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
+                          int prev = am.getRingerMode();
+                          am.setRingerMode(AudioManager.RINGER_MODE_SILENT);
+                          new Handler().postDelayed(() -> am.setRingerMode(prev), minutes * 60 * 1000L);
+                      });
+                  }
+                  @JavascriptInterface public boolean hasPermission(){
+                      NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+                      return nm.isNotificationPolicyAccessGranted();
+                  }
+              }
+          }
+          JAVA
+
+          # صلاحيات الصامت
+          sed -i '/<application/i <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
+
           npx cap sync android
           cd android && chmod +x gradlew &&./gradlew assembleDebug
       - uses: actions/upload-artifact@v5
