@@ -12,9 +12,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-
-      - run: rm -rf android node_modules package-lock.json
-      - run: mkdir -p www && echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><h1>BoRaed</h1></body></html>' > www/index.html
+      - run: mkdir -p www
       - run: npm init -y
       - run: npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest @capacitor/status-bar@latest --legacy-peer-deps
       - run: npx cap init BoRaed com.boraed.prayer --web-dir=www
