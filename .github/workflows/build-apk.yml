@@ -11,12 +11,12 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - run: rm -rf android node_modules package-lock.json
-      - run: mkdir -p www && echo '<!DOCTYPE html><html><body><h1>BoRaed</h1></body></html>' > www/index.html
+      - run: mkdir -p www && echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><h1>BoRaed</h1></body></html>' > www/index.html
       - run: npm init -y
-      - run: npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/local-notifications @capacitor/status-bar --legacy-peer-deps
+      - run: npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest @capacitor/status-bar@latest --legacy-peer-deps
       - run: npx cap init BoRaed com.boraed.prayer --web-dir=www
       - run: npx cap add android
       - run: npx cap sync android
