@@ -86,27 +86,39 @@ jobs:
                                     } else { v.vibrate(ms); }
                                 });
                             }
-                            @JavascriptInterface public void setSilent(int minutes){
-                                runOnUiThread(() -> {
-                                    try {
-                                        AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
-                                        previousRingerMode = am.getRingerMode();
-                                        am.setRingerMode(AudioManager.RINGER_MODE_SILENT);
-                                        if(restoreRunnable!= null) handler.removeCallbacks(restoreRunnable);
-                                        showOngoingNotification(minutes);
-                                        restoreRunnable = () -> { am.setRingerMode(previousRingerMode); cancelNotification(); };
-                                        handler.postDelayed(restoreRunnable, minutes * 60 * 1000L);
-                                    } catch(Exception e){}
-                                });
-                            }
-                            @JavascriptInterface public void cancelSilent(){
-                                runOnUiThread(() -> {
-                                    if(restoreRunnable!= null) handler.removeCallbacks(restoreRunnable);
-                                    AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
-                                    am.setRingerMode(previousRingerMode);
-                                    cancelNotification();
-                                });
-                            }
+                          @JavascriptInterface public void setSilent(int minutes){
+    runOnUiThread(() -> {
+        try {
+            AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
+            NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+            previousRingerMode = am.getRingerMode();
+            int prevFilter = nm.getCurrentInterruptionFilter();
+            // الطريقة 1: صامت حقيقي + الطريقة 2: عدم إزعاج
+            am.setRingerMode(AudioManager.RINGER_MODE_SILENT);
+            if(nm.isNotificationPolicyAccessGranted()){
+                nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE);
+            }
+            if(restoreRunnable != null) handler.removeCallbacks(restoreRunnable);
+            showOngoingNotification(minutes);
+            restoreRunnable = () -> {
+                am.setRingerMode(previousRingerMode);
+                try{ if(nm.isNotificationPolicyAccessGranted()) nm.setInterruptionFilter(prevFilter); }catch(Exception e){}
+                cancelNotification();
+            };
+            handler.postDelayed(restoreRunnable, minutes * 60 * 1000L);
+        } catch(Exception e){ e.printStackTrace(); }
+    });
+}
+@JavascriptInterface public void cancelSilent(){
+    runOnUiThread(() -> {
+        if(restoreRunnable != null) handler.removeCallbacks(restoreRunnable);
+        AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
+        NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+        am.setRingerMode(previousRingerMode);
+        try{ if(nm.isNotificationPolicyAccessGranted()) nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL); }catch(Exception e){}
+        cancelNotification();
+    });
+}
                             @JavascriptInterface public boolean hasPermission(){ NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE); return nm.isNotificationPolicyAccessGranted(); }
                             @JavascriptInterface public void requestPermission(){ startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)); }
                         }
