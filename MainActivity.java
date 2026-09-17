@@ -58,7 +58,7 @@ public class MainActivity extends BridgeActivity {
                 try {
                     AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
                     previousRingerMode = am.getRingerMode();
-                    // صامت فقط - بدون تفعيل عدم الإزعاج
+                    // هنا التعديل: صامت مع هزاز
                     am.setRingerMode(AudioManager.RINGER_MODE_VIBRATE);
                     if(restoreRunnable!=null) handler.removeCallbacks(restoreRunnable);
                     showOngoingNotification(minutes);
