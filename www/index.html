@@ -133,29 +133,49 @@ Error generating stack: `+I.message+`
   <script>(function(){function m(a){var h=a.getAttribute("href");if(!h)return;try{var u=new URL(h,document.baseURI);if((u.protocol==="http:"||u.protocol==="https:")&&u.host!==location.host){a.target="_blank";a.rel="noopener noreferrer";}}catch(e){}}function s(){document.querySelectorAll("a[href]").forEach(m);}if(document.readyState!=="loading"){s();}else{document.addEventListener("DOMContentLoaded",s);}document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(a){m(a);}},true);})();</script>
  <script>
 (function(){
-  function checkPerm(){
-    if(!window.AndroidSilent) { setTimeout(checkPerm, 500); return; }
-    if(!AndroidSilent.hasPermission()){
-      if(confirm('لعمل الصامت بعد الأذان (30، 60، 22 دقيقة) حسب الإعدادات، يجب تفعيل إذن "الوصول إلى عدم الإزعاج". هل تريد تفعيله الآن؟')){
-        AndroidSilent.requestPermission();
-      }
-    }
-  }
-  // اطلب الإذن بعد 3 ثواني من فتح التطبيق
-  setTimeout(checkPerm, 3000);
+  function init(){
+    if(!window.AndroidSilent){ setTimeout(init, 500); return; }
 
-  // إصلاح زر تجربة الهزاز - يهز فقط
-  function fixBtn(){
-    let btn = Array.from(document.querySelectorAll('button')).find(b=>b.textContent.includes('تجربة الهزاز'));
-    if(!btn){ setTimeout(fixBtn, 1000); return; }
-    if(btn.dataset.fixed) return;
-    btn.dataset.fixed='1';
-    btn.addEventListener('click', (e)=>{
-      e.preventDefault();
+    // 1. طلب إذن عدم الإزعاج أول مرة
+    if(!window._permChecked){
+      window._permChecked = true;
+      setTimeout(()=>{
+        if(!AndroidSilent.hasPermission()){
+          if(confirm('لعمل الصامت بعد الأذان (22، 30، 60 دقيقة) يجب تفعيل إذن عدم الإزعاج. تفعّله الآن؟')){
+            AndroidSilent.requestPermission();
+          }
+        }
+      }, 3000);
+    }
+
+    // 2. أصلح زر تجربة الهزاز الأصلي + أضف زر المؤقت بجانبه في صفحة الإعدادات فقط
+    let hazzazBtn = Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim().includes('تجربة الهزاز'));
+    if(!hazzazBtn){ setTimeout(init, 1000); return; }
+
+    if(hazzazBtn.dataset.fixed) return;
+    hazzazBtn.dataset.fixed = '1';
+
+    // زر الهزاز يهتز فقط
+    hazzazBtn.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
       AndroidSilent.vibrate(800);
     });
+
+    // أنشئ زر المؤقت داخل نفس البطاقة في صفحة الإعدادات
+    if(!document.getElementById('timer-test-btn')){
+      let timerBtn = document.createElement('button');
+      timerBtn.id = 'timer-test-btn';
+      timerBtn.textContent = '⏱️ جرب الصامت 2 دقيقة الآن';
+      timerBtn.style = 'margin-top:12px;width:100%;background:#2e7d32;color:white;padding:12px;border-radius:12px;border:none;font-size:15px;';
+      timerBtn.onclick = (e)=>{
+        e.preventDefault();
+        AndroidSilent.setSilent(2);
+      };
+      hazzazBtn.parentElement.appendChild(timerBtn);
+    }
   }
-  fixBtn();
+  document.addEventListener('DOMContentLoaded', init);
+  setInterval(init, 1500);
 })();
 </script> 
 </body>
