@@ -22,6 +22,8 @@ public class MainActivity extends BridgeActivity {
     private int previousRingerMode = AudioManager.RINGER_MODE_NORMAL;
     private Handler handler = new Handler();
     private Runnable restoreRunnable;
+    private Runnable tickerRunnable;
+    private long silentEndTime = 0;
     public static final String CHANNEL_ID = "silent_mode_channel";
     public static final int NOTIF_ID = 1001;
     @Override public void onCreate(Bundle s){
@@ -58,11 +60,12 @@ public class MainActivity extends BridgeActivity {
                 try {
                     AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
                     previousRingerMode = am.getRingerMode();
-                    // هنا التعديل: صامت مع هزاز
                     am.setRingerMode(AudioManager.RINGER_MODE_VIBRATE);
+                    silentEndTime = System.currentTimeMillis() + (minutes * 60 * 1000L);
                     if(restoreRunnable!=null) handler.removeCallbacks(restoreRunnable);
-                    showOngoingNotification(minutes);
-                    restoreRunnable = () -> { am.setRingerMode(previousRingerMode); cancelNotification(); };
+                    if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable);
+                    startTicker();
+                    restoreRunnable = () -> { am.setRingerMode(previousRingerMode); silentEndTime=0; cancelNotification(); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); };
                     handler.postDelayed(restoreRunnable, minutes*60*1000L);
                 } catch(Exception e){}
             });
@@ -70,21 +73,50 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface public void cancelSilent(){
             runOnUiThread(() -> {
                 if(restoreRunnable!=null) handler.removeCallbacks(restoreRunnable);
+                if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable);
+                silentEndTime=0;
                 AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE);
                 am.setRingerMode(previousRingerMode);
                 cancelNotification();
             });
         }
+        @JavascriptInterface public long getRemainingSeconds(){
+            if(silentEndTime==0) return 0;
+            long rem = (silentEndTime - System.currentTimeMillis())/1000;
+            return rem>0 ? rem : 0;
+        }
         @JavascriptInterface public boolean hasPermission(){ NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE); return nm.isNotificationPolicyAccessGranted(); }
         @JavascriptInterface public void requestPermission(){ startActivity(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)); }
     }
-    void showOngoingNotification(int minutes){
+    void startTicker(){
+        tickerRunnable = new Runnable() {
+            @Override public void run(){
+                long rem = 0;
+                if(silentEndTime>0) rem = (silentEndTime - System.currentTimeMillis())/1000;
+                if(rem<=0){ return; }
+                showOngoingNotification(rem);
+                handler.postDelayed(this, 1000);
+            }
+        };
+        handler.post(tickerRunnable);
+        showOngoingNotification((silentEndTime - System.currentTimeMillis())/1000);
+    }
+    void showOngoingNotification(long totalSeconds){
+        long m = totalSeconds/60;
+        long s = totalSeconds%60;
+        String timeText = String.format("%02d:%02d", m, s);
         Intent cancelIntent = new Intent(this, MainActivity.class);
         cancelIntent.setAction("CANCEL_SILENT");
         PendingIntent pi = PendingIntent.getActivity(this, 0, cancelIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(getApplicationInfo().icon).setContentTitle("وضع الصامت مفعل").setContentText("ينتهي بعد "+minutes+" دقيقة - اضغط للانهاء").setOngoing(true).addAction(0, "انهاء الصامت الان", pi);
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(getApplicationInfo().icon)
+            .setContentTitle("🔕 وضع الصامت مفعل")
+            .setContentText("المتبقي: "+timeText+" - اضغط للإنهاء الآن")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(0, "إيقاف الصامت الآن", pi);
         ((NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTIF_ID, b.build());
     }
     void cancelNotification(){ ((NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE)).cancel(NOTIF_ID); }
-    @Override protected void onNewIntent(Intent i){ super.onNewIntent(i); if(i!=null && "CANCEL_SILENT".equals(i.getAction())){ AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE); am.setRingerMode(previousRingerMode); if(restoreRunnable!=null) handler.removeCallbacks(restoreRunnable); cancelNotification(); } }
+    @Override protected void onNewIntent(Intent i){ super.onNewIntent(i); if(i!=null && "CANCEL_SILENT".equals(i.getAction())){ AudioManager am = (AudioManager)getSystemService(Context.AUDIO_SERVICE); am.setRingerMode(previousRingerMode); if(restoreRunnable!=null) handler.removeCallbacks(restoreRunnable); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); silentEndTime=0; cancelNotification(); } }
 }
