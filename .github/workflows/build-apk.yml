@@ -13,7 +13,10 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: rm -rf android node_modules package-lock.json
-      - run: npm install @capacitor/core @capacitor/android @capacitor/local-notifications
+      - run: mkdir -p www
+      - run: echo '<!DOCTYPE html><html><body><h1>BoRaed</h1></body></html>' > www/index.html
+      - run: npx cap init BoRaed com.boraed.prayer --web-dir=www --npm-client npm
+      - run: npm install @capacitor/core @capacitor/android @capacitor/local-notifications @capacitor/status-bar
       - run: npx cap add android
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew &&./gradlew assembleDebug
