@@ -4,36 +4,30 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
       - name: Build App
         run: |
-          # إذا ما فيه package.json ننشئه
           if [! -f package.json ]; then
             echo '{"name":"boraed-prayer","version":"1.0.0","private":true}' > package.json
           fi
-
           mkdir -p www
-          # ملف index بسيط إذا www فاضي
           if [! -f www/index.html ]; then
-            echo '<html><body><h1>Sama - Boraed Prayer</h1><script>if(window.AndroidSilent){AndroidSilent.hasPermission&&!AndroidSilent.hasPermission()&&AndroidSilent.requestPermission()}</script></body></html>' > www/index.html
+            echo '<html><body><h1>Sama</h1></body></html>' > www/index.html
           fi
-
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest --legacy-peer-deps
-
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --legacy-peer-deps
           npx cap init "Sama" com.boraed.prayer --web-dir=www --npm-client npm || true
           npx cap add android || true
 
-          # الأيقونة
           if [ -f icon.png ]; then
             for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
               mkdir -p android/app/src/main/res/$d
@@ -42,23 +36,20 @@ jobs:
             done
           fi
 
-          # الأصوات
           mkdir -p android/app/src/main/res/raw
           [ -d www/sounds ] && cp www/sounds/* android/app/src/main/res/raw/ 2>/dev/null || true
-          [ -d www/audio ] && cp www/audio/* android/app/src/main/res/raw/ 2>/dev/null || true
 
-          # MainActivity.java مع الـ WakeLock
           if [ -f MainActivity.java ]; then
             mkdir -p android/app/src/main/java/com/boraed/prayer/
             cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
           fi
 
-          # إصلاح الصلاحيات
           python3 - << 'PY'
           import pathlib
           mf_path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
           mf = mf_path.read_text()
-          perms = """
+          if "POST_NOTIFICATIONS" not in mf:
+              perms = """
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
               <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -68,19 +59,17 @@ jobs:
               <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
               <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
               <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-          """
-          if "POST_NOTIFICATIONS" not in mf:
+              """
               mf = mf.replace("<application", perms + "\n <application")
           if "AlarmReceiver" not in mf:
               mf = mf.replace("</application>", ' <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n <receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n </application>')
           mf_path.write_text(mf)
-          print("manifest fixed")
           PY
 
           npx cap sync android
           cd android && chmod +x gradlew &&./gradlew assembleDebug --no-daemon
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Sama-APK-Final
           path: android/app/build/outputs/apk/debug/app-debug.apk
