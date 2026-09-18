@@ -103,6 +103,9 @@ public class MainActivity extends BridgeActivity {
 
     static void doSilentReal(Context ctx, int minutes){
         try {
+            PowerManager pm = (PowerManager)ctx.getSystemService(Context.POWER_SERVICE);
+            PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Sama:Silent");
+            wl.acquire(5000);
             AudioManager am = (AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE);
             previousRingerMode = am.getRingerMode();
             am.setRingerMode(AudioManager.RINGER_MODE_VIBRATE);
@@ -112,6 +115,7 @@ public class MainActivity extends BridgeActivity {
             startTicker(ctx);
             restoreRunnable = () -> { try{ AudioManager a=(AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE); a.setRingerMode(previousRingerMode);}catch(Exception e){} silentEndTime=0; cancelStatic(ctx); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); };
             handler.postDelayed(restoreRunnable, minutes*60*1000L);
+            wl.release();
         } catch(Exception e){}
     }
     static void doCancelReal(Context ctx){
@@ -132,12 +136,18 @@ public class MainActivity extends BridgeActivity {
 
     public static class AlarmReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context ctx, Intent intent){
+            PowerManager.WakeLock wakeLock = null;
             try {
+                PowerManager pm = (PowerManager)ctx.getSystemService(Context.POWER_SERVICE);
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "Sama:PrayerAlarm");
+                wakeLock.acquire(70000); // يبقى صاحي 70 ثانية حتى والشاشة مطفأة
+
                 int id = intent.getIntExtra("id",0);
                 String title = intent.getStringExtra("title");
                 String body = intent.getStringExtra("body");
                 boolean isAdhan = intent.getBooleanExtra("isAdhan",false);
                 int silentMinutes = intent.getIntExtra("silentMinutes",0);
+
                 try {
                     int soundRes = 0;
                     if(isAdhan){
@@ -149,14 +159,20 @@ public class MainActivity extends BridgeActivity {
                     }
                     if(soundRes!=0){
                         MediaPlayer mp = MediaPlayer.create(ctx, soundRes);
-                        if(mp!=null){ mp.setOnCompletionListener(MediaPlayer::release); mp.start(); }
+                        if(mp!=null){ 
+                            mp.setWakeMode(ctx, PowerManager.PARTIAL_WAKE_LOCK);
+                            mp.setOnCompletionListener(MediaPlayer::release); 
+                            mp.start(); 
+                        }
                     }
                 } catch(Exception e){}
+
                 NotificationManager nm = (NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
                 Intent open = new Intent(ctx, MainActivity.class);
                 PendingIntent pi = PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, ALARM_CHANNEL_ID).setSmallIcon(ctx.getApplicationInfo().icon).setContentTitle(title).setContentText(body).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setAutoCancel(true).setContentIntent(pi);
                 nm.notify(2000+id, b.build());
+
                 if(isAdhan && silentMinutes>0){
                     AudioManager am = (AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE);
                     previousRingerMode = am.getRingerMode();
@@ -168,7 +184,9 @@ public class MainActivity extends BridgeActivity {
                     restoreRunnable = () -> { try{ AudioManager a=(AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE); a.setRingerMode(previousRingerMode);}catch(Exception e){} silentEndTime=0; cancelStatic(ctx); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); };
                     handler.postDelayed(restoreRunnable, silentMinutes*60*1000L);
                 }
-            } catch(Exception e){}
+            } catch(Exception e){} finally {
+                if(wakeLock!=null && wakeLock.isHeld()) wakeLock.release();
+            }
         }
     }
 
