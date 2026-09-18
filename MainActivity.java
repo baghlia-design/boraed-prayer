@@ -171,4 +171,12 @@ public class MainActivity extends BridgeActivity {
             } catch(Exception e){}
         }
     }
+
+    public static class BootReceiver extends BroadcastReceiver {
+        @Override public void onReceive(Context ctx, Intent intent){
+            if(Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())){
+                // سيتم إعادة الجدولة عند فتح التطبيق من الـ JS
+            }
+        }
+    }
 }
