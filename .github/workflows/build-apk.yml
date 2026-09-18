@@ -4,59 +4,72 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - uses: actions/setup-java@v5
+          node-version: 20
+
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 17
+
       - name: Build App
         run: |
           mkdir -p www
-          npm init -y
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest --legacy-peer-deps
-          npx cap init BoRaed com.boraed.prayer --web-dir=www
-          npx cap add android
+          npx cap init "Sama" com.boraed.prayer --web-dir=www --npm-client npm
+          npx cap add android || true
+
+          # الأيقونة
           if [ -f icon.png ]; then
             for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
-              cp icon.png android/app/src/main/res/$d/ic_launcher.png
-              cp icon.png android/app/src/main/res/$d/ic_launcher_round.png
-              cp icon.png android/app/src/main/res/$d/ic_launcher_foreground.png
+              mkdir -p android/app/src/main/res/$d
+              cp icon.png android/app/src/main/res/$d/ic_launcher.png || true
+              cp icon.png android/app/src/main/res/$d/ic_launcher_round.png || true
             done
           fi
+
+          # الأصوات
           mkdir -p android/app/src/main/res/raw
-          # انسخ الأصوات إذا موجودة في www
-          if [ -d www/sounds ]; then cp www/sounds/* android/app/src/main/res/raw/ 2>/dev/null || true; fi
-          if [ -d www/audio ]; then cp www/audio/* android/app/src/main/res/raw/ 2>/dev/null || true; fi
-          if [ -d www/assets ]; then find www/assets -name "*.mp3" -exec cp {} android/app/src/main/res/raw/ \; 2>/dev/null || true; fi
-          cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
+          [ -d www/sounds ] && cp www/sounds/* android/app/src/main/res/raw/ 2>/dev/null || true
+          [ -d www/audio ] && cp www/audio/* android/app/src/main/res/raw/ 2>/dev/null || true
+
+          # MainActivity.java لازم يكون موجود في جذر المشروع
+          if [ -f MainActivity.java ]; then
+            cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
+          fi
+
           python3 - << 'PY'
           import pathlib
           mf_path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
           mf = mf_path.read_text()
+
           perms = """
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
               <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
               <uses-permission android:name="android.permission.WAKE_LOCK" />
-              <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
               <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
               <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
               <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
           """
           if "POST_NOTIFICATIONS" not in mf:
               mf = mf.replace("<application", perms + "\n <application")
-          receiver = ' <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />'
+
           if "AlarmReceiver" not in mf:
-              mf = mf.replace("</application>", receiver + "\n </application>")
+              mf = mf.replace("</application>", ' <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n <receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true">\n <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>\n </receiver>\n </application>')
+
           mf_path.write_text(mf)
-          print("manifest fixed")
+          print("manifest fixed with 8 permissions")
           PY
+
           npx cap sync android
-          cd android && chmod +x gradlew &&./gradlew assembleDebug
-      - uses: actions/upload-artifact@v5
+          cd android && chmod +x gradlew &&./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: BoRaed-APK
+          name: Sama-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
