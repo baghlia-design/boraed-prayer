@@ -11,7 +11,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Build App
         run: |
@@ -47,7 +47,6 @@ jobs:
           if "AlarmReceiver" not in mf:
               mf = mf.replace("</application>", '<receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n<receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n</application>')
           p.write_text(mf)
-          print("manifest fixed")
           PY
           fi
 
