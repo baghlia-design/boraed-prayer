@@ -28,6 +28,7 @@ jobs:
           fi
           cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
           sed -i '/<application/i <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n <uses-permission android:name="android.permission.WAKE_LOCK" />\n <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n <uses-permission android:name="android.permission.VIBRATE" />\n <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/a <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />' android/app/src/main/AndroidManifest.xml
           npx cap sync android
           cd android && chmod +x gradlew &&./gradlew assembleDebug
       - uses: actions/upload-artifact@v5
