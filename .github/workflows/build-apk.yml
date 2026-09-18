@@ -1,44 +1,86 @@
-name: Build BoRaed APK
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
+name: Build APK
+on: [push]
 jobs:
   build:
-    runs-on: ubuntu-24.04
-
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
-      - name: Install dependencies
-        run: npm install
+      - name: Build App
+        run: |
+          # إذا ما فيه package.json ننشئه
+          if [! -f package.json ]; then
+            echo '{"name":"boraed-prayer","version":"1.0.0","private":true}' > package.json
+          fi
 
-      - name: Build web app
-        run: npm run build
+          mkdir -p www
+          # ملف index بسيط إذا www فاضي
+          if [! -f www/index.html ]; then
+            echo '<html><body><h1>Sama - Boraed Prayer</h1><script>if(window.AndroidSilent){AndroidSilent.hasPermission&&!AndroidSilent.hasPermission()&&AndroidSilent.requestPermission()}</script></body></html>' > www/index.html
+          fi
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/local-notifications@latest --legacy-peer-deps
 
-      - name: Build Debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
+          npx cap init "Sama" com.boraed.prayer --web-dir=www --npm-client npm || true
+          npx cap add android || true
 
-      - name: Upload APK - BoRaed
-        uses: actions/upload-artifact@v4
+          # الأيقونة
+          if [ -f icon.png ]; then
+            for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              mkdir -p android/app/src/main/res/$d
+              cp icon.png android/app/src/main/res/$d/ic_launcher.png || true
+              cp icon.png android/app/src/main/res/$d/ic_launcher_round.png || true
+            done
+          fi
+
+          # الأصوات
+          mkdir -p android/app/src/main/res/raw
+          [ -d www/sounds ] && cp www/sounds/* android/app/src/main/res/raw/ 2>/dev/null || true
+          [ -d www/audio ] && cp www/audio/* android/app/src/main/res/raw/ 2>/dev/null || true
+
+          # MainActivity.java مع الـ WakeLock
+          if [ -f MainActivity.java ]; then
+            mkdir -p android/app/src/main/java/com/boraed/prayer/
+            cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
+          fi
+
+          # إصلاح الصلاحيات
+          python3 - << 'PY'
+          import pathlib
+          mf_path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
+          mf = mf_path.read_text()
+          perms = """
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+              <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+              <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+          """
+          if "POST_NOTIFICATIONS" not in mf:
+              mf = mf.replace("<application", perms + "\n <application")
+          if "AlarmReceiver" not in mf:
+              mf = mf.replace("</application>", ' <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n <receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n </application>')
+          mf_path.write_text(mf)
+          print("manifest fixed")
+          PY
+
+          npx cap sync android
+          cd android && chmod +x gradlew &&./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: BoRaed-debug-apk
+          name: Sama-APK-Final
           path: android/app/build/outputs/apk/debug/app-debug.apk
