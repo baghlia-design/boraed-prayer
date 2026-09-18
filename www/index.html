@@ -132,54 +132,35 @@ Error generating stack: `+I.message+`
 </script>
   <script>(function(){function m(a){var h=a.getAttribute("href");if(!h)return;try{var u=new URL(h,document.baseURI);if((u.protocol==="http:"||u.protocol==="https:")&&u.host!==location.host){a.target="_blank";a.rel="noopener noreferrer";}}catch(e){}}function s(){document.querySelectorAll("a[href]").forEach(m);}if(document.readyState!=="loading"){s();}else{document.addEventListener("DOMContentLoaded",s);}document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(a){m(a);}},true);})();</script>
 <script>
-// === إصلاحات بورائد - لا تغير الواجهة الأصلية ===
+// إصلاح بورائد الصحيح - داخل الإعدادات فقط بدون نافذة جانبية
 (function(){
-  function init(){
-    if(!window.AndroidSilent){ setTimeout(init,500); return; }
-    let vibBtn = Array.from(document.querySelectorAll('button, div, span')).find(el=> (el.textContent||'').trim()==='تجربة الهزاز' || (el.textContent||'').includes('تجربة الهزاز'));
-    if(!vibBtn){ setTimeout(init,1000); return; }
-    if(vibBtn.dataset.fixed) return;
-    vibBtn.dataset.fixed='1';
-
-    // إصلاح الهزاز
-    vibBtn.style.cursor='pointer';
-    vibBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); try{ AndroidSilent.vibrate(800); }catch(err){} });
-
-    // أضف العداد وزر الإيقاف تحت زر تجربة الهزاز مباشرة (داخل نفس الكرت)
-    if(!document.getElementById('silent-countdown-box')){
-      let box=document.createElement('div');
-      box.id='silent-countdown-box';
-      box.style='margin-top:15px;padding:14px;background:#1c2126;border:1px solid #2a3239;border-radius:12px;text-align:center;';
-      box.innerHTML=`
-        <div style="color:#9aa0a6;font-size:12px">المتبقي على انتهاء الصامت</div>
-        <div id="countdown-timer" style="font-size:36px;font-weight:800;color:#4caf50;margin:6px 0">00:00</div>
-        <div id="countdown-label" style="font-size:11px;color:#9aa0a6">غير مفعل</div>
-        <button id="stop-silent-btn" style="width:100%;margin-top:10px;padding:12px;border-radius:10px;border:none;background:#c62828;color:#fff;font-weight:600">إيقاف الوضع الصامت الآن</button>
-        <button id="timer-test-btn" style="width:100%;margin-top:8px;padding:12px;border-radius:10px;border:none;background:#2e7d32;color:#fff">⏱️ جرب الصامت 2 دقيقة الآن</button>
-      `;
-      vibBtn.parentNode.appendChild(box);
-      document.getElementById('stop-silent-btn').onclick=()=>{ try{ AndroidSilent.cancelSilent(); }catch(e){} };
-      document.getElementById('timer-test-btn').onclick=()=>{ try{ AndroidSilent.setSilent(2); }catch(e){} };
-      setInterval(()=>{
-        try{
-          let sec=AndroidSilent.getRemainingSeconds();
-          let t=document.getElementById('countdown-timer');
-          let l=document.getElementById('countdown-label');
-          if(sec>0){ let m=Math.floor(sec/60),s=sec%60; t.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); l.textContent='وضع الصامت مفعل - صامت مع هزاز'; }
-          else{ t.textContent='00:00'; l.textContent='غير مفعل - اضغط جرب الصامت 2 دقيقة'; }
-        }catch(e){}
-      },1000);
-    }
-  }
-  document.addEventListener('DOMContentLoaded', init);
-  setInterval(init,2000);
-
-  // تحويل تنبيهاتك الأصلية لمنبهات ساعة حقيقية تشتغل والشاشة مطفية مع الحفاظ على صوت الكوثر والمؤذن
-  window.scheduleNativeFromOriginal = function(times){
-    // times = [{time: millis, title, body, isAdhan, silentMinutes}]
+  function fix(){
     if(!window.AndroidSilent) return;
-    try{ AndroidSilent.cancelAllAlarms(); times.forEach((it,i)=>{ AndroidSilent.scheduleAlarm(it.time,i,it.title,it.body,it.isAdhan,it.silentMinutes||0); }); }catch(e){}
-  };
+    // ابحث عن زر تجربة الهزاز داخل صفحة الإعدادات فقط
+    let settingsPage = document.querySelector('#settingsPage, .settings-page, [id*="settings"], [class*="settings"]');
+    if(!settingsPage) settingsPage = document.body;
+    let vibBtn = null;
+    settingsPage.querySelectorAll('button, div, span, p').forEach(el=>{
+      if((el.textContent||'').trim() === 'تجربة الهزاز') vibBtn = el;
+    });
+    if(!vibBtn || vibBtn.dataset.fixed) return;
+    vibBtn.dataset.fixed='1';
+    vibBtn.onclick = function(e){ e.preventDefault(); try{ AndroidSilent.vibrate(800); }catch(x){} };
+
+    // أنشئ العداد بشكل طبيعي داخل نفس الكرت - بدون fixed
+    if(document.getElementById('silent-countdown-box')) return;
+    let card = vibBtn.closest('.card, .settings-card, div');
+    if(!card) card = vibBtn.parentNode;
+    let box = document.createElement('div');
+    box.id='silent-countdown-box';
+    box.style.cssText='margin-top:12px;padding:12px;background:rgba(0,0,0,0.3);border-radius:10px;text-align:center;border:1px solid #8d6e63;width:100%;box-sizing:border-box;position:relative;left:auto;right:auto;';
+    box.innerHTML='<div style="font-size:12px;opacity:0.8">المتبقي على الصامت</div><div id="countdown-timer" style="font-size:28px;color:#4caf50;font-weight:700">00:00</div><div id="countdown-label" style="font-size:11px;opacity:0.7">غير مفعل</div><button id="stop-silent-btn" style="width:100%;margin-top:8px;padding:10px;background:#c62828;color:#fff;border:none;border-radius:8px">إيقاف الصامت الآن</button><button id="timer-test-btn" style="width:100%;margin-top:6px;padding:10px;background:#2e7d32;color:#fff;border:none;border-radius:8px">⏱️ جرب 2 دقيقة</button>';
+    card.appendChild(box);
+    document.getElementById('stop-silent-btn').onclick=()=>{ try{AndroidSilent.cancelSilent();}catch(e){} };
+    document.getElementById('timer-test-btn').onclick=()=>{ try{AndroidSilent.setSilent(2);}catch(e){} };
+    setInterval(()=>{ try{let s=AndroidSilent.getRemainingSeconds();let t=document.getElementById('countdown-timer');let l=document.getElementById('countdown-label');if(s>0){let m=Math.floor(s/60),sec=s%60;t.textContent=String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');l.textContent='مفعل - صامت مع هزاز';}else{t.textContent='00:00';l.textContent='غير مفعل';}}catch(e){} },1000);
+  }
+  document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(fix,1000); setInterval(fix,2000); });
 })();
 </script>  
 </body>
