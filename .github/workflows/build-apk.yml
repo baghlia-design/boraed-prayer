@@ -26,13 +26,34 @@ jobs:
               cp icon.png android/app/src/main/res/$d/ic_launcher_foreground.png
             done
           fi
-          cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
           mkdir -p android/app/src/main/res/raw
+          # انسخ الأصوات إذا موجودة في www
           if [ -d www/sounds ]; then cp www/sounds/* android/app/src/main/res/raw/ 2>/dev/null || true; fi
           if [ -d www/audio ]; then cp www/audio/* android/app/src/main/res/raw/ 2>/dev/null || true; fi
-          sed -i '/<application/a <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />' android/app/src/main/AndroidManifest.xml          
-          sed -i '/<application/i <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n <uses-permission android:name="android.permission.WAKE_LOCK" />\n <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n <uses-permission android:name="android.permission.VIBRATE" />\n <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
-          sed -i '/<application/a <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />' android/app/src/main/AndroidManifest.xml
+          if [ -d www/assets ]; then find www/assets -name "*.mp3" -exec cp {} android/app/src/main/res/raw/ \; 2>/dev/null || true; fi
+          cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
+          python3 - << 'PY'
+          import pathlib
+          mf_path = pathlib.Path("android/app/src/main/AndroidManifest.xml")
+          mf = mf_path.read_text()
+          perms = """
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+              <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+          """
+          if "POST_NOTIFICATIONS" not in mf:
+              mf = mf.replace("<application", perms + "\n <application")
+          receiver = ' <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />'
+          if "AlarmReceiver" not in mf:
+              mf = mf.replace("</application>", receiver + "\n </application>")
+          mf_path.write_text(mf)
+          print("manifest fixed")
+          PY
           npx cap sync android
           cd android && chmod +x gradlew &&./gradlew assembleDebug
       - uses: actions/upload-artifact@v5
