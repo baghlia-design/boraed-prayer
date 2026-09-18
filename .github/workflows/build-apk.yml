@@ -27,6 +27,10 @@ jobs:
             done
           fi
           cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
+          mkdir -p android/app/src/main/res/raw
+          if [ -d www/sounds ]; then cp www/sounds/* android/app/src/main/res/raw/ 2>/dev/null || true; fi
+          if [ -d www/audio ]; then cp www/audio/* android/app/src/main/res/raw/ 2>/dev/null || true; fi
+          sed -i '/<application/a <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />' android/app/src/main/AndroidManifest.xml          
           sed -i '/<application/i <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n <uses-permission android:name="android.permission.WAKE_LOCK" />\n <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n <uses-permission android:name="android.permission.VIBRATE" />\n <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />' android/app/src/main/AndroidManifest.xml
           sed -i '/<application/a <receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />' android/app/src/main/AndroidManifest.xml
           npx cap sync android
