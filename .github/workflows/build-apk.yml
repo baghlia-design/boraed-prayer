@@ -15,18 +15,20 @@ jobs:
 
       - name: Build App
         run: |
-          if [! -f package.json ]; then
-            echo '{"name":"boraed-prayer","version":"1.0.0","private":true}' > package.json
-          fi
+          echo '{"name":"boraed-prayer","version":"1.0.0","private":true}' > package.json
           mkdir -p www
-          if [! -f www/index.html ]; then
-            echo '<html><body><h1>Sama</h1></body></html>' > www/index.html
-          fi
+          echo '<html><body><h1>Sama Prayer</h1></body></html>' > www/index.html
+          echo '{"appId":"com.boraed.prayer","appName":"Sama","webDir":"www","bundledWebRuntime":false}' > capacitor.config.json
 
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --legacy-peer-deps
-          npx cap init "Sama" com.boraed.prayer --web-dir=www --npm-client npm || true
-          npx cap add android || true
 
+          npx cap add android
+
+          mkdir -p android/app/src/main/res/raw
+          mkdir -p android/app/src/main/java/com/boraed/prayer/
+          if [ -f MainActivity.java ]; then
+            cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
+          fi
           if [ -f icon.png ]; then
             for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
               mkdir -p android/app/src/main/res/$d
@@ -34,24 +36,20 @@ jobs:
             done
           fi
 
-          mkdir -p android/app/src/main/res/raw
-
-          if [ -f MainActivity.java ]; then
-            mkdir -p android/app/src/main/java/com/boraed/prayer/
-            cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java
-          fi
-
-          python3 - << 'PY'
+          if [ -f android/app/src/main/AndroidManifest.xml ]; then
+            python3 - << 'PY'
           import pathlib
           p = pathlib.Path("android/app/src/main/AndroidManifest.xml")
           mf = p.read_text()
           if "POST_NOTIFICATIONS" not in mf:
-              perms = '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n<uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n<uses-permission android:name="android.permission.WAKE_LOCK" />\n<uses-permission android:name="android.permission.VIBRATE" />\n<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n<uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n'
+              perms = '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n<uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n<uses-permission android:name="android.permission.WAKE_LOCK" />\n<uses-permission android:name="android.permission.VIBRATE" />\n<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n<uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n'
               mf = mf.replace("<application", perms + "<application")
           if "AlarmReceiver" not in mf:
               mf = mf.replace("</application>", '<receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n<receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n</application>')
           p.write_text(mf)
+          print("manifest fixed")
           PY
+          fi
 
           npx cap sync android
           cd android && chmod +x gradlew &&./gradlew assembleDebug --no-daemon
