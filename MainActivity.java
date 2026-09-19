@@ -82,20 +82,15 @@ public class MainActivity extends BridgeActivity {
 }
     @Override public void onWindowFocusChanged(boolean hasFocus){ super.onWindowFocusChanged(hasFocus); if(hasFocus) setFullScreen(); }
     void askAllPermissions(){
-        if(Build.VERSION.SDK_INT >= 33){
-            if(ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED){
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF); return;
-            }
+    if(Build.VERSION.SDK_INT >= 33){
+        if(ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED){
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF); return;
         }
-        askExactAlarm();
     }
-    void askExactAlarm(){
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S){
-            AlarmManager am = (AlarmManager)getSystemService(Context.ALARM_SERVICE);
-            if(!am.canScheduleExactAlarms()){
-                try{ Toast.makeText(this,"الرجاء السماح للتنبيه الدقيق",Toast.LENGTH_LONG).show(); Intent i=new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM); i.setData(Uri.parse("package:"+getPackageName())); startActivityForResult(i, REQ_ALARM); return; }catch(Exception e){}
-            }
-        }
+    // تخطي صفحة المنبهات لأننا نستخدم setAlarmClock الذي لا يحتاج إذن سامسونج
+    askDndPermission();
+}
+   
         askDndPermission();
     }
     void askDndPermission(){
