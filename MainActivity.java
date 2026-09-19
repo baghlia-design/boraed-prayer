@@ -44,7 +44,6 @@ public class MainActivity extends BridgeActivity {
     public static final int NOTIF_ID = 1001;
     private static final int REQ_NOTIF = 101;
     private static final int REQ_DND = 102;
-    private static final int REQ_ALARM = 103;
 
     @Override public void onCreate(Bundle s){
         super.onCreate(s);
@@ -56,55 +55,39 @@ public class MainActivity extends BridgeActivity {
         if(getIntent()!=null && "CANCEL_SILENT".equals(getIntent().getAction())) doCancelReal(this);
     }
     void setFullScreen(){
-    // 1- منع الرسم تحت فتحة الكاميرا
-    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P){
-        getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-    }
-    
-    // 2- لا ترسم خلف الشريطين - خلي المحتوى محصور بينهم
-    WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
-    
-    // 3- إخفاء الشريطين فقط بالسحب، لكن لا تغطي الكاميرا
-    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
-        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        if(controller != null){
-            controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            controller.hide(WindowInsetsCompat.Type.navigationBars()); // نخفي السفلي فقط
-            // controller.hide(Type.statusBars()) -> لا تخفي العلوي عشان الكاميرا
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P){
+            getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
         }
-    } else {
-        getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-        );
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R){
+            WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+            if(c!=null){ c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE); c.hide(WindowInsetsCompat.Type.navigationBars()); }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+        }
     }
-}
     @Override public void onWindowFocusChanged(boolean hasFocus){ super.onWindowFocusChanged(hasFocus); if(hasFocus) setFullScreen(); }
+    
     void askAllPermissions(){
-    if(Build.VERSION.SDK_INT >= 33){
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED){
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF); return;
+        if(Build.VERSION.SDK_INT >= 33){
+            if(ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED){
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF); return;
+            }
         }
-    }
-    // تخطي صفحة المنبهات لأننا نستخدم setAlarmClock الذي لا يحتاج إذن سامسونج
-    askDndPermission();
-}
-   
         askDndPermission();
     }
     void askDndPermission(){
         NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
         if(!nm.isNotificationPolicyAccessGranted()){
-            try{ Toast.makeText(this,"الرجاء تفعيل وصول عدم الإزعاج",Toast.LENGTH_LONG).show(); startActivityForResult(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS), REQ_DND); return; }catch(Exception e){}
+            try{ Toast.makeText(this,"للوضع الصامت: فعل وصول عدم الإزعاج",Toast.LENGTH_LONG).show(); startActivityForResult(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS), REQ_DND); return; }catch(Exception e){}
         }
         askBatteryPermission();
     }
     void askBatteryPermission(){
         try{ PowerManager pm=(PowerManager)getSystemService(Context.POWER_SERVICE); if(!pm.isIgnoringBatteryOptimizations(getPackageName())){ Intent i=new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS); i.setData(Uri.parse("package:"+getPackageName())); startActivity(i); } }catch(Exception e){}
     }
-    @Override public void onRequestPermissionsResult(int rc,String[] p,int[] g){ super.onRequestPermissionsResult(rc,p,g); if(rc==REQ_NOTIF) askExactAlarm(); }
-    @Override protected void onActivityResult(int rc,int res,Intent d){ super.onActivityResult(rc,res,d); if(rc==REQ_ALARM) askDndPermission(); else if(rc==REQ_DND) askBatteryPermission(); }
+    @Override public void onRequestPermissionsResult(int rc,String[] p,int[] g){ super.onRequestPermissionsResult(rc,p,g); if(rc==REQ_NOTIF) askDndPermission(); }
+    @Override protected void onActivityResult(int rc,int res,Intent d){ super.onActivityResult(rc,res,d); if(rc==REQ_DND) askBatteryPermission(); }
     void createChannels(){
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
             NotificationManager nm=(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
@@ -150,7 +133,7 @@ public class MainActivity extends BridgeActivity {
                 PendingIntent fullPI=PendingIntent.getActivity(ctx, id+1000, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 PendingIntent contentPI=PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 NotificationManager nm=(NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-                NotificationCompat.Builder b=new NotificationCompat.Builder(ctx, ALARM_CHANNEL_ID).setSmallIcon(ctx.getApplicationInfo().icon).setContentTitle(title!=null?title:"حان وقت الصلاة").setContentText(body!=null?body:"حان الآن موعد الصلاة").setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC).setFullScreenIntent(fullPI,true).setAutoCancel(true).setOngoing(true).setContentIntent(contentPI);
+                NotificationCompat.Builder b=new NotificationCompat.Builder(ctx, ALARM_CHANNEL_ID).setSmallIcon(ctx.getApplicationInfo().icon).setContentTitle(title!=null?title:"حان وقت الصلاة").setContentText(body!=null?body:"حان الآن موعد الصلاة").setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setFullScreenIntent(fullPI,true).setAutoCancel(true).setOngoing(true).setContentIntent(contentPI);
                 nm.notify(2000+id, b.build());
                 try{ new Handler(Looper.getMainLooper()).postDelayed(() -> { try{ ctx.startActivity(open); }catch(Exception e){} },500); }catch(Exception e){ ctx.startActivity(open); }
                 if(isAdhan && silentMinutes>0){ AudioManager am=(AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE); previousRingerMode=am.getRingerMode(); am.setRingerMode(AudioManager.RINGER_MODE_VIBRATE); silentEndTime=System.currentTimeMillis()+(silentMinutes*60*1000L); if(restoreRunnable!=null) handler.removeCallbacks(restoreRunnable); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); startTicker(ctx); showStatic(ctx,silentMinutes*60L); restoreRunnable=() -> { try{ AudioManager a=(AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE); a.setRingerMode(previousRingerMode);}catch(Exception e){} silentEndTime=0; cancelStatic(ctx); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); }; handler.postDelayed(restoreRunnable,silentMinutes*60*1000L); }
