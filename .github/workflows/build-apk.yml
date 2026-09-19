@@ -12,13 +12,12 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-
       - name: Build App
         run: |
-          # 1. تنظيف شامل
+          # 1. تنظيف
           rm -rf android node_modules package-lock.json
 
-          # 2. تأكد من وجود موقعك الأصلي ولا تمسحه
+          # 2. فحص index
           if [ -f www/index ] && [! -f www/index.html ]; then mv www/index www/index.html; fi
           if [! -f www/index.html ]; then mkdir -p www; echo '<html><body><h1>Sama Prayer</h1></body></html>' > www/index.html; fi
 
@@ -29,7 +28,7 @@ jobs:
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --legacy-peer-deps
           npx cap add android
 
-          # 4. نسخ ملفاتك الأساسية
+          # 4. نسخ ملفاتك
           mkdir -p android/app/src/main/java/com/boraed/prayer/
           mkdir -p android/app/src/main/res/raw
           if [ -f MainActivity.java ]; then cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java; fi
@@ -40,21 +39,39 @@ jobs:
               cp icon.png android/app/src/main/res/$d/ic_launcher_round.png || true
             done
           fi
+          # نسخ صوت الأذان إذا موجود
+          if [ -f azan.mp3 ]; then cp azan.mp3 android/app/src/main/res/raw/azan.mp3; fi
+          if [ -f azan.mp3 ]; then cp azan.mp3 android/app/src/main/res/raw/adhan.mp3; fi
 
-          # 5. الصلاحيات
-          python3 - << 'PY'
+          # 5. إصلاح AndroidManifest - الحل لمشكلتك هنا
+          python3 << 'PY'
           import pathlib
           p=pathlib.Path("android/app/src/main/AndroidManifest.xml")
           mf=p.read_text()
-          if "POST_NOTIFICATIONS" not in mf:
-              perms='<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />\n<uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n<uses-permission android:name="android.permission.WAKE_LOCK" />\n<uses-permission android:name="android.permission.VIBRATE" />\n<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\n<uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />\n<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />\n<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\n'
-              mf=mf.replace("<application",perms+"<application")
+          # أضف كل الأذونات الناقصة
+          perms_needed = [
+              "android.permission.POST_NOTIFICATIONS",
+              "android.permission.SCHEDULE_EXACT_ALARM",
+              "android.permission.USE_EXACT_ALARM",
+              "android.permission.USE_FULL_SCREEN_INTENT",
+              "android.permission.WAKE_LOCK",
+              "android.permission.VIBRATE",
+              "android.permission.RECEIVE_BOOT_COMPLETED",
+              "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+              "android.permission.MODIFY_AUDIO_SETTINGS"
+          ]
+          for perm in perms_needed:
+              if perm not in mf:
+                  mf=mf.replace("<application", f'<uses-permission android:name="{perm}" />\n <application')
+
           if "AlarmReceiver" not in mf:
-              mf=mf.replace("</application>",'<receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n<receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n</application>')
+              mf=mf.replace("</application>", '<receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n <receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n </application>')
+
           p.write_text(mf)
+          print("Manifest fixed")
           PY
 
-          # 6. المزامنة والبناء - المسار الصحيح لـ gradlew
+          # 6. بناء APK
           npx cap sync android
           chmod +x android/gradlew
           cd android &&./gradlew assembleDebug --no-daemon
