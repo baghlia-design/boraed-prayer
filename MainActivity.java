@@ -1,4 +1,5 @@
 package com.boraed.prayer;
+import android.Manifest;
 import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -7,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -20,7 +22,10 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.widget.Toast;
+import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -33,6 +38,9 @@ public class MainActivity extends BridgeActivity {
     public static final String CHANNEL_ID = "silent_mode_channel";
     public static final String ALARM_CHANNEL_ID = "prayer_alarm_channel";
     public static final int NOTIF_ID = 1001;
+    private static final int REQ_NOTIF = 101;
+    private static final int REQ_DND = 102;
+    private static final int REQ_ALARM = 103;
 
     @Override public void onCreate(Bundle s){
         super.onCreate(s);
@@ -41,13 +49,71 @@ public class MainActivity extends BridgeActivity {
         getWindow().getDecorView().setSystemUiVisibility(1542);
         createChannels();
         getBridge().getWebView().addJavascriptInterface(new SilentBridge(), "AndroidSilent");
+        handler.postDelayed(() -> askAllPermissions(), 1500); // يطلب بعد ثانية ونص من التشغيل
+    }
+
+    void askAllPermissions(){
+        // 1- اذن التنبيهات - أندرويد 13+
+        if(Build.VERSION.SDK_INT >= 33){
+            if(ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED){
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+                return; // نوقف ونكمل بعد ما يوافق
+            }
+        }
+        askExactAlarm();
+    }
+
+    void askExactAlarm(){
+        // 2- اذن المنبه الدقيق - أندرويد 12+
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S){
+            AlarmManager am = (AlarmManager)getSystemService(Context.ALARM_SERVICE);
+            if(!am.canScheduleExactAlarms()){
+                try {
+                    Toast.makeText(this, "الرجاء السماح للتنبيه الدقيق ليعمل الأذان والشاشة مطفأة", Toast.LENGTH_LONG).show();
+                    Intent i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                    i.setData(Uri.parse("package:"+getPackageName()));
+                    startActivityForResult(i, REQ_ALARM);
+                    return;
+                } catch(Exception e){}
+            }
+        }
+        askDndPermission();
+    }
+
+    void askDndPermission(){
+        // 3- اذن عدم الإزعاج (للوضع الصامت)
+        NotificationManager nm = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+        if(!nm.isNotificationPolicyAccessGranted()){
+            try {
+                Toast.makeText(this, "الرجاء تفعيل وصول عدم الإزعاج لتفعيل الصامت تلقائياً", Toast.LENGTH_LONG).show();
+                Intent i = new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS);
+                startActivityForResult(i, REQ_DND);
+                return;
+            } catch(Exception e){}
+        }
+        askBatteryPermission();
+    }
+
+    void askBatteryPermission(){
+        // 4- تجاهل تحسين البطارية
         try {
             PowerManager pm = (PowerManager)getSystemService(Context.POWER_SERVICE);
             if(!pm.isIgnoringBatteryOptimizations(getPackageName())){
                 Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                i.setData(Uri.parse("package:"+getPackageName())); startActivity(i);
+                i.setData(Uri.parse("package:"+getPackageName()));
+                startActivity(i);
             }
         } catch(Exception e){}
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults){
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(requestCode==REQ_NOTIF) askExactAlarm();
+    }
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data){
+        super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode==REQ_ALARM) askDndPermission();
+        else if(requestCode==REQ_DND) askBatteryPermission();
     }
 
     void createChannels(){
@@ -140,39 +206,23 @@ public class MainActivity extends BridgeActivity {
             try {
                 PowerManager pm = (PowerManager)ctx.getSystemService(Context.POWER_SERVICE);
                 wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "Sama:PrayerAlarm");
-                wakeLock.acquire(70000); // يبقى صاحي 70 ثانية حتى والشاشة مطفأة
-
+                wakeLock.acquire(70000);
                 int id = intent.getIntExtra("id",0);
                 String title = intent.getStringExtra("title");
                 String body = intent.getStringExtra("body");
                 boolean isAdhan = intent.getBooleanExtra("isAdhan",false);
                 int silentMinutes = intent.getIntExtra("silentMinutes",0);
-
                 try {
                     int soundRes = 0;
-                    if(isAdhan){
-                        soundRes = ctx.getResources().getIdentifier("azan","raw",ctx.getPackageName());
-                        if(soundRes==0) soundRes = ctx.getResources().getIdentifier("adhan","raw",ctx.getPackageName());
-                    } else {
-                        soundRes = ctx.getResources().getIdentifier("kawthar","raw",ctx.getPackageName());
-                        if(soundRes==0) soundRes = ctx.getResources().getIdentifier("alkawthar","raw",ctx.getPackageName());
-                    }
-                    if(soundRes!=0){
-                        MediaPlayer mp = MediaPlayer.create(ctx, soundRes);
-                        if(mp!=null){ 
-                            mp.setWakeMode(ctx, PowerManager.PARTIAL_WAKE_LOCK);
-                            mp.setOnCompletionListener(MediaPlayer::release); 
-                            mp.start(); 
-                        }
-                    }
+                    if(isAdhan){ soundRes = ctx.getResources().getIdentifier("azan","raw",ctx.getPackageName()); if(soundRes==0) soundRes = ctx.getResources().getIdentifier("adhan","raw",ctx.getPackageName()); }
+                    else { soundRes = ctx.getResources().getIdentifier("kawthar","raw",ctx.getPackageName()); if(soundRes==0) soundRes = ctx.getResources().getIdentifier("alkawthar","raw",ctx.getPackageName()); }
+                    if(soundRes!=0){ MediaPlayer mp = MediaPlayer.create(ctx, soundRes); if(mp!=null){ mp.setWakeMode(ctx, PowerManager.PARTIAL_WAKE_LOCK); mp.setOnCompletionListener(MediaPlayer::release); mp.start(); } }
                 } catch(Exception e){}
-
                 NotificationManager nm = (NotificationManager)ctx.getSystemService(Context.NOTIFICATION_SERVICE);
                 Intent open = new Intent(ctx, MainActivity.class);
                 PendingIntent pi = PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, ALARM_CHANNEL_ID).setSmallIcon(ctx.getApplicationInfo().icon).setContentTitle(title).setContentText(body).setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setAutoCancel(true).setContentIntent(pi);
                 nm.notify(2000+id, b.build());
-
                 if(isAdhan && silentMinutes>0){
                     AudioManager am = (AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE);
                     previousRingerMode = am.getRingerMode();
@@ -184,17 +234,12 @@ public class MainActivity extends BridgeActivity {
                     restoreRunnable = () -> { try{ AudioManager a=(AudioManager)ctx.getSystemService(Context.AUDIO_SERVICE); a.setRingerMode(previousRingerMode);}catch(Exception e){} silentEndTime=0; cancelStatic(ctx); if(tickerRunnable!=null) handler.removeCallbacks(tickerRunnable); };
                     handler.postDelayed(restoreRunnable, silentMinutes*60*1000L);
                 }
-            } catch(Exception e){} finally {
-                if(wakeLock!=null && wakeLock.isHeld()) wakeLock.release();
-            }
+            } catch(Exception e){} finally { if(wakeLock!=null && wakeLock.isHeld()) wakeLock.release(); }
         }
     }
-
     public static class BootReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context ctx, Intent intent){
-            if(Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())){
-                // سيتم إعادة الجدولة عند فتح التطبيق من الـ JS
-            }
+            if(Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())){}
         }
     }
 }
