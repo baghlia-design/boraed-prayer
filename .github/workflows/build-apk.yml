@@ -12,33 +12,37 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
       - name: Build App
         run: |
-          # لا ننشئ www إذا موجود - نحافظ على موقعك الأصلي
-          if [! -f www/index.html ] && [! -f www/index ]; then
-            mkdir -p www
-            echo '<html><body><h1>Sama Prayer</h1></body></html>' > www/index.html
-          fi
-          # إذا الملف اسمه index بدون html غيّره
-          if [ -f www/index ] && [! -f www/index.html ]; then
-            mv www/index www/index.html
-          fi
-          if [! -f package.json ]; then
-            echo '{"name":"boraed-prayer","version":"1.0.0","private":true}' > package.json
-          fi
-          if [! -f capacitor.config.json ]; then
-            echo '{"appId":"com.boraed.prayer","appName":"Sama","webDir":"www","bundledWebRuntime":false}' > capacitor.config.json
-          fi
+          # 1. تنظيف شامل
+          rm -rf android node_modules package-lock.json
+
+          # 2. تأكد من وجود موقعك الأصلي ولا تمسحه
+          if [ -f www/index ] && [! -f www/index.html ]; then mv www/index www/index.html; fi
+          if [! -f www/index.html ]; then mkdir -p www; echo '<html><body><h1>Sama Prayer</h1></body></html>' > www/index.html; fi
+
+          echo '{"name":"boraed-prayer","private":true}' > package.json
+          echo '{"appId":"com.boraed.prayer","appName":"Sama","webDir":"www","bundledWebRuntime":false}' > capacitor.config.json
+
+          # 3. تثبيت وبناء
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --legacy-peer-deps
-          npx cap add android || true
-          mkdir -p android/app/src/main/res/raw
+          npx cap add android
+
+          # 4. نسخ ملفاتك الأساسية
           mkdir -p android/app/src/main/java/com/boraed/prayer/
+          mkdir -p android/app/src/main/res/raw
           if [ -f MainActivity.java ]; then cp MainActivity.java android/app/src/main/java/com/boraed/prayer/MainActivity.java; fi
           if [ -f icon.png ]; then
-            for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do mkdir -p android/app/src/main/res/$d; cp icon.png android/app/src/main/res/$d/ic_launcher.png || true; done
+            for d in mipmap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              mkdir -p android/app/src/main/res/$d
+              cp icon.png android/app/src/main/res/$d/ic_launcher.png || true
+              cp icon.png android/app/src/main/res/$d/ic_launcher_round.png || true
+            done
           fi
-          if [ -f android/app/src/main/AndroidManifest.xml ]; then
-            python3 - << 'PY'
+
+          # 5. الصلاحيات
+          python3 - << 'PY'
           import pathlib
           p=pathlib.Path("android/app/src/main/AndroidManifest.xml")
           mf=p.read_text()
@@ -49,10 +53,13 @@ jobs:
               mf=mf.replace("</application>",'<receiver android:name=".MainActivity$AlarmReceiver" android:enabled="true" android:exported="false" />\n<receiver android:name=".MainActivity$BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>\n</application>')
           p.write_text(mf)
           PY
-          fi
+
+          # 6. المزامنة والبناء - المسار الصحيح لـ gradlew
           npx cap sync android
-          cd android && chmod +x gradlew &&./gradlew assembleDebug --no-daemon
+          chmod +x android/gradlew
+          cd android &&./gradlew assembleDebug --no-daemon
+
       - uses: actions/upload-artifact@v5
         with:
-          name: Sama-APK-Final-With-Your-Site
+          name: Sama-APK-Fixed
           path: android/app/build/outputs/apk/debug/app-debug.apk
